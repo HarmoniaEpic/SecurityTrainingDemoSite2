@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="情報セキュリティ啓発教材。サポート詐欺・ClickFix（偽CAPTCHA）の手口を、実際の操作やコマンドを一切使わずに疑似体験するための教育用ページです。">
+<title>ClickFix 疑似体験教材（公開版）</title>
+<!--
+  ClickFix 疑似体験教材（公開版）
+  - このページは教育目的の疑似体験です。
+  - 実際のクリップボードには一切触れません（navigator.clipboard / execCommand を使用していません）。
+  - 実在のコマンド文字列は一切含みません。画面上の「命令」はすべて表示だけの札（トークン）です。
+  - 外部通信・外部読み込みはありません。
+-->
+<style>
+  :root{
+    --navy:#14213D; --ink:#14213D; --paper:#F7F6F1;
+    --orange:#C9681A; --amber:#F2A65A; --line:#D8D6CE; --muted:#6A7179;
+    --good:#1f7a4d; --bad:#B3261E; --card:#FFFFFF; --token:#5a1f87;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:"Segoe UI","Noto Sans JP",-apple-system,"Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+       background:var(--paper); color:var(--ink); line-height:1.6}
+
+  /* 常時表示バナー：このページが本物の罠として機能しないための安全装置 */
+  #eduBar{position:sticky; top:0; z-index:9000; display:flex; gap:12px; align-items:center; flex-wrap:wrap;
+          background:var(--navy); color:#fff; padding:10px 16px; font-size:14px; border-bottom:3px solid var(--amber)}
+  #eduBar strong{color:var(--amber)}
+  #eduBar .sp{flex:1}
+  #eduBar button{background:var(--amber); color:var(--navy); border:0; border-radius:6px; padding:7px 14px; font-weight:700; cursor:pointer; font-size:14px}
+  #eduBar button.ghost{background:transparent;color:#cfe;border:1px solid #456}
+
+  .wrap{max-width:860px; margin:0 auto; padding:28px 20px 60px}
+  h1{font-size:28px; margin:8px 0 4px}
+  h3{font-size:18px; margin:18px 0 8px}
+  p{margin:10px 0}
+  .lead{font-size:17px; color:#2b3340}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; margin:16px 0}
+  .btn{display:inline-block; background:var(--orange); color:#fff; border:0; border-radius:8px; padding:12px 22px; font-size:16px; font-weight:700; cursor:pointer}
+  .btn:hover{background:#b35c14}
+  .btn.sub{background:#fff; color:var(--navy); border:2px solid var(--line)}
+  .btn.sub:hover{border-color:var(--navy)}
+  .pill{display:inline-block; background:#FBE9D6; color:var(--orange); font-weight:700; padding:4px 12px; border-radius:999px; font-size:13px; letter-spacing:.08em}
+  .hidden{display:none !important}
+  .note{font-size:13px; color:var(--muted)}
+  .two{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media(max-width:680px){ .two{grid-template-columns:1fr} }
+  ul.points{list-style:none; padding:0; margin:0}
+  ul.points li{padding:10px 0 10px 34px; position:relative; border-top:1px solid var(--line)}
+  ul.points li:first-child{border-top:0}
+  ul.points li::before{content:"⚠"; position:absolute; left:4px; top:8px; color:var(--bad); font-size:18px}
+  footer{max-width:860px; margin:0 auto; padding:16px 20px 40px; font-size:12px; color:var(--muted); border-top:1px solid var(--line)}
+
+  /* 「命令」を表す札。文字列ではなく表示だけの札であることを視覚的に示す */
+  .token{display:inline-block; background:#f3eefa; color:var(--token); border:1.5px dashed var(--token);
+         border-radius:6px; padding:2px 10px; font-weight:700; font-size:14px; white-space:nowrap}
+
+  /* 疑似クリップボード表示（目立たせない） */
+  .clipbox{position:fixed; right:14px; bottom:14px; z-index:7000; background:#fff; border:1px solid var(--line);
+           border-radius:10px; padding:8px 12px; font-size:12px; color:var(--muted); box-shadow:0 2px 10px rgba(0,0,0,.08); max-width:260px}
+  .clipbox .lbl{font-weight:700; color:#8a929b; letter-spacing:.06em}
+  .clipbox .val{margin-top:2px; color:#333}
+  .clipbox.flash{animation:fl 1.6s ease-in-out 2; border-color:var(--bad)}
+  @keyframes fl{0%,100%{box-shadow:0 2px 10px rgba(0,0,0,.08)} 50%{box-shadow:0 0 0 6px rgba(179,38,30,.35)}}
+
+  /* ====== 偽CAPTCHA（見た目だけの再現） ====== */
+  .fakewrap{background:#e9eef3; border:1px solid #c9d2db; border-radius:12px; padding:26px; max-width:520px; margin:6px auto}
+  .cf-box{background:#fff; border:1px solid #d0d7de; border-radius:6px; padding:14px 16px; display:flex; align-items:center; gap:14px; box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .cf-check{width:28px;height:28px;border:2px solid #9aa4af;border-radius:4px;cursor:pointer;flex:0 0 auto;display:flex;align-items:center;justify-content:center;background:#fff}
+  .cf-check .tick{color:#1f9d55;font-size:22px;display:none}
+  .cf-check .loader{width:18px;height:18px;border:3px solid #cfe0f5;border-top-color:#4a90e2;border-radius:50%;animation:sp .8s linear infinite;display:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  .cf-label{font-size:16px;color:#1f2328}
+  .cf-logo{margin-left:auto;text-align:right;font-size:11px;color:#7a828b;line-height:1.3}
+  .cf-steps{background:#fffbe6;border:1px solid #ecd98a;border-radius:8px;padding:14px 16px;margin-top:16px;font-size:15px}
+  .cf-steps b{color:#8a6d00}
+  .kbd{display:inline-block;background:#f4f5f7;border:1px solid #c9ccd1;border-bottom-width:2px;border-radius:5px;padding:1px 8px;font-size:13px;font-family:monospace;color:#1f2328}
+  .simcard{max-width:520px; margin:18px auto 0; border:2px dashed #b9823a; background:#fffdf7}
+  .simzone-tag{display:inline-block; background:#eef3f8; color:#1f4175; border:1px solid #c9d8ea; border-radius:6px; padding:4px 12px; font-size:13px; font-weight:700; margin-bottom:8px}
+  .simcard .use{margin:0 0 12px; font-size:14px; color:#2b3340}
+
+  /* ====== 疑似ダイアログ ====== */
+  .winos{position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; align-items:center; justify-content:center; z-index:8000}
+  .rundlg{width:420px; max-width:92vw; background:#f0f0f0; border:1px solid #6a6a6a; box-shadow:0 10px 40px rgba(0,0,0,.4); color:#111}
+  .rundlg .bar,.msgbox .bar{background:linear-gradient(#2b5797,#1f4175); color:#fff; padding:6px 10px; font-size:13px; display:flex; justify-content:space-between}
+  .rundlg .bd{padding:16px}
+  .rundlg .row{display:flex; gap:10px; align-items:flex-start; margin-bottom:12px}
+  .rundlg .ico{font-size:26px}
+  .rundlg .field{width:100%; min-height:32px; padding:5px 7px; border:1px solid #7a7a7a; background:#fff; font-size:13px}
+  .rundlg .btns{display:flex; gap:8px; justify-content:flex-end}
+  .wbtn{min-width:78px; padding:5px 10px; background:#e1e1e1; border:1px solid #adadad; cursor:pointer; font-size:13px}
+  .wbtn:hover{background:#e8f0fb;border-color:#5b9bd5}
+  .msgbox{width:380px; max-width:92vw; background:#f0f0f0; border:1px solid #6a6a6a; box-shadow:0 10px 40px rgba(0,0,0,.4)}
+  .msgbox .bd{padding:20px 18px; display:flex; gap:14px; align-items:center; font-size:15px}
+  .msgbox .bd .i{font-size:30px}
+  .msgbox .ft{padding:0 18px 16px; text-align:right}
+  .mark{background:#ffe9a8; padding:0 4px; border-radius:3px}
+
+  /* ====== 疑似ターミナル（裏側で起きていることの「見える化」。すべて架空の表示） ====== */
+  .termwin{width:640px; max-width:94vw; background:#0b0f14; border:1px solid #333; border-radius:8px; box-shadow:0 14px 50px rgba(0,0,0,.6); overflow:hidden; font-family:"Cascadia Mono",Consolas,"Courier New",monospace}
+  .termwin .tbar{background:#1b222b; color:#cfd6de; font-size:12px; padding:7px 12px; display:flex; align-items:center; gap:8px; font-family:"Segoe UI","Noto Sans JP",sans-serif}
+  .termwin .tbar .dots{display:flex; gap:6px}
+  .termwin .tbar .dots i{width:10px;height:10px;border-radius:50%;display:inline-block;background:#555}
+  .termwin .tbar .dots i:nth-child(1){background:#e0443e}.termwin .tbar .dots i:nth-child(2){background:#dea123}.termwin .tbar .dots i:nth-child(3){background:#1aab29}
+  .termwin .tbar .sim{margin-left:auto; color:#F2A65A; font-weight:700}
+  .termwin .body{position:relative}
+  .termwin .devil{position:absolute; right:14px; top:6px; font-size:110px; line-height:1; opacity:.16; pointer-events:none; user-select:none; filter:saturate(1.3)}
+  .termwin .bombs{position:absolute; left:12px; bottom:8px; font-size:22px; opacity:.55; pointer-events:none; user-select:none; letter-spacing:6px}
+  .termwin pre{position:relative; margin:0; padding:14px 16px; min-height:230px; color:#9fe39f; font-size:13px; line-height:1.55; white-space:pre-wrap; word-break:break-all}
+  .termwin pre .ic{display:inline-block; width:1.6em; text-align:center}
+  .termwin pre .warn{color:#ff7b72}
+  .termwin pre .dim{color:#7b8794}
+  .termwin pre .cur{display:inline-block; width:8px; height:14px; background:#9fe39f; vertical-align:-2px; animation:blink 1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  .termwin .prog{padding:0 16px 12px}
+  .termwin .prog .lbl{font-size:12px; color:#cfd6de; margin-bottom:6px; font-family:"Segoe UI","Noto Sans JP",sans-serif; display:flex; justify-content:space-between}
+  .termwin .prog .bar{height:12px; background:#1b222b; border-radius:6px; overflow:hidden; border:1px solid #333}
+  .termwin .prog .bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,#B3261E,#ff7b72); transition:width .5s ease}
+  .termwin .tfoot{padding:8px 12px 12px; text-align:right; font-family:"Segoe UI","Noto Sans JP",sans-serif}
+</style>
+</head>
+<body>
+
+<div id="eduBar">
+  <strong>⚠ 体験学習教材（公開版）</strong>
+  <span>サポート詐欺・ClickFix（偽CAPTCHA）の手口を疑似体験する教育用ページです。実際のコピー処理も、実在のコマンドも含みません。</span>
+  <span class="sp"></span>
+  <button class="ghost" onclick="go('intro')">最初から</button>
+  <button onclick="go('reveal')">種明かしを見る</button>
+</div>
+
+<!-- 疑似クリップボード（目立たせない。種明かしで強調する） -->
+<div class="clipbox" id="clipbox">
+  <div class="lbl">クリップボード（疑似）</div>
+  <div class="val" id="clipval">（空）</div>
+</div>
+
+<div class="wrap">
+
+<!-- ===== イントロ ===== -->
+<section id="intro">
+  <span class="pill">はじめに</span>
+  <h1>ClickFix 疑似体験 ― 「あなた自身の手で」実行させる手口</h1>
+  <p class="lead">サポート詐欺やマルウェア配布で使われている「ClickFix」を疑似体験します。この公開版は、<b>実際のコピー処理も実在のコマンドも一切使わない</b>完全なシミュレーションです。画面上の「命令」はすべて表示だけの札（<span class="token">《PCへの悪意ある指示コマンド》</span>）で、何も運ばず、何も実行されません。</p>
+  <div class="card">
+    <h3>体験のしかた</h3>
+    <p>次の画面から先は「攻撃側が見せてくる画面」の再現です。普段どおりの気持ちで操作してみてください。終わったら「種明かし」で、裏で何が起きていたかを確認します。</p>
+    <p class="note">画面右下の小さな表示にも、ときどき目をやってみてください。</p>
+  </div>
+  <p><button class="btn" onclick="go('fake')">体験をはじめる ▶</button></p>
+</section>
+
+<!-- ===== 偽CAPTCHA ===== -->
+<section id="fake" class="hidden">
+  <p class="note">— ここから先は「攻撃側が見せてくる画面」の再現です —</p>
+  <div class="fakewrap">
+    <p style="margin-top:0;font-size:15px;color:#333">このサイトにアクセスする前に、あなたが人間であることを確認してください。</p>
+    <div class="cf-box">
+      <div class="cf-check" id="cfCheck" onclick="verify()">
+        <span class="loader" id="cfLoader"></span>
+        <span class="tick" id="cfTick">✔</span>
+      </div>
+      <div class="cf-label">私はロボットではありません</div>
+      <div class="cf-logo">— 確認システム —<br>プライバシー・利用規約</div>
+    </div>
+
+    <div class="cf-steps hidden" id="cfSteps">
+      <p style="margin-top:0"><b>確認を完了するには、以下の手順を実行してください：</b></p>
+      <p style="margin:6px 0">1. <span class="kbd">Windows</span> + <span class="kbd">R</span> を押す<br>
+         2. <span class="kbd">Ctrl</span> + <span class="kbd">V</span> を押す<br>
+         3. <span class="kbd">Enter</span> を押す</p>
+      <p class="note" style="margin:10px 0 0">※ この教材では何も起きません。本物の攻撃では、上のチェックボックスを「チェックした瞬間」に、裏であるものがコピーされています。</p>
+    </div>
+  </div>
+
+  <!-- 偽CAPTCHAとは別セクション：ブラウザ内シミュレーションの入口 -->
+  <div class="card simcard hidden" id="simZone">
+    <span class="simzone-tag">▼ ここから下は体験用（ブラウザ内シミュレーション）</span>
+    <p class="use">実際のあなたのPCは操作しません。上の3手順を、この教材の中だけで疑似的に再現して試すためのボタンです。</p>
+    <button class="btn" onclick="openRun()">① Windows+R を押す（疑似）</button>
+  </div>
+</section>
+
+<!-- ===== 種明かし ===== -->
+<section id="reveal" class="hidden">
+  <span class="pill" style="background:#e7f0ea;color:var(--good)">種明かし</span>
+  <h1>何が起きていたか</h1>
+
+  <div class="card">
+    <h3>「私はロボットではありません」を押した瞬間に…</h3>
+    <p>あなたは<b>チェックを入れただけ</b>のつもりでした。しかしその瞬間、画面右下の「クリップボード（疑似）」が<b>（空）</b>から <span class="token">《PCへの悪意ある指示コマンド》</span> に変わっていました。<span class="mark">気づきましたか？</span></p>
+    <p>本物の攻撃では、これがあなたのPCの本当のクリップボードに対して行われます。コピー＆ペーストの「コピー」が、知らないうちに済まされているのです。</p>
+    <p><button class="btn sub" onclick="replayPlant()">もう一度、仕込まれる瞬間を見る</button></p>
+  </div>
+
+  <div class="card">
+    <h3>この後の3手順の正体</h3>
+    <div class="two">
+      <div>
+        <p><b>1. Windows + R</b><br>パソコンに直接命令を打ち込む窓「ファイル名を指定して実行」を開く操作。知らない人には「認証の手順」に見える。</p>
+        <p><b>2. Ctrl + V</b><br>さっき勝手にコピーされた命令が貼り付けられる。</p>
+      </div>
+      <div>
+        <p><b>3. Enter</b><br>命令が実行される。Windowsに元から入っている正規の道具を<b>本人が動かす</b>形になるため、ウイルス対策ソフトが見逃しやすい。</p>
+        <p class="note">実際の攻撃では、ここで情報窃取ウイルスや遠隔操作ツールが動き出します。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>見破るためのポイント</h3>
+    <ul class="points">
+      <li>「人間であることの確認」で <b>キーボード操作（Win+R など）を求められた</b> → 正規のCAPTCHAは絶対に求めません。</li>
+      <li>Webページが <b>何かの貼り付けと実行</b> を指示してきた。</li>
+      <li>「修正」「認証」「更新」を名目に <b>急がされ</b>、手順どおりの操作だけを促してくる。</li>
+    </ul>
+  </div>
+
+  <div class="card" style="border-color:var(--amber);background:#fffdf7">
+    <h3>もし手順を実行してしまったら</h3>
+    <p>すぐにネット接続を切り、そのPCの使用をやめて情報担当（ICT支援員・教育委員会）へ。別の端末から、そのPCで使っていたパスワードを変更してください。「何も起きていないから大丈夫」と自己判断しないこと。</p>
+  </div>
+
+  <p>
+    <button class="btn sub" onclick="go('intro')">もう一度体験する</button>
+    <button class="btn" onclick="window.print()">この種明かしを印刷</button>
+  </p>
+</section>
+
+</div>
+
+<footer>
+  本教材は教育目的の疑似体験ページです。実際のクリップボード操作、実在のコマンド、外部通信を一切含みません。
+  参考：IPA 情報セキュリティ安心相談窓口「偽セキュリティ警告（サポート詐欺）対策特集ページ」、トレンドマイクロ Security GO「ClickFix（クリックフィックス）とは？」
+</footer>
+
+<div id="modalHost"></div>
+
+<script>
+  // 表示だけの札。文字列としてもコマンドではない。
+  var TOKEN_TEXT = "《PCへの悪意ある指示コマンド》";
+  var MSG_TITLE  = "（疑似）実行結果";
+  var MSG_BODY   = "こんな感じで騙されます";
+
+  var planted = false;
+  var sections = ["intro","fake","reveal"];
+
+  function go(id){
+    sections.forEach(function(s){ document.getElementById(s).classList.toggle("hidden", s!==id); });
+    closeModal();
+    if(id==="intro"){ resetAll(); }
+    if(id==="fake"){ resetFake(); }
+    window.scrollTo(0,0);
+  }
+  function resetAll(){ planted=false; setClip(false); resetFake(); }
+  function resetFake(){
+    document.getElementById("cfLoader").style.display="none";
+    document.getElementById("cfTick").style.display="none";
+    document.getElementById("cfSteps").classList.add("hidden");
+    document.getElementById("simZone").classList.add("hidden");
+  }
+  function setClip(on, flash){
+    var box=document.getElementById("clipbox"), v=document.getElementById("clipval");
+    if(on){ v.innerHTML='<span class="token">'+esc(TOKEN_TEXT)+'</span>'; } else { v.textContent="（空）"; }
+    box.classList.remove("flash"); if(flash){ void box.offsetWidth; box.classList.add("flash"); }
+  }
+
+  // チェック → 疑似クリップボードに札を置く（静かに）
+  function verify(){
+    var ld=document.getElementById("cfLoader"), tk=document.getElementById("cfTick");
+    ld.style.display="inline-block";
+    planted=true; setClip(true, false);   // ← 仕込まれる瞬間。目立たせない。
+    setTimeout(function(){
+      ld.style.display="none"; tk.style.display="inline";
+      document.getElementById("cfSteps").classList.remove("hidden");
+      document.getElementById("simZone").classList.remove("hidden");
+    }, 1100);
+  }
+
+  // 種明かしでの再生：空 → 札 を強調つきで見せる
+  function replayPlant(){
+    setClip(false,false);
+    setTimeout(function(){ setClip(true,true); }, 700);
+  }
+
+  // 疑似「ファイル名を指定して実行」
+  function openRun(){
+    document.getElementById("modalHost").innerHTML =
+      '<div class="winos" id="winos">'+
+      '  <div class="rundlg" role="dialog" aria-label="ファイル名を指定して実行（疑似）">'+
+      '    <div class="bar"><span>ファイル名を指定して実行（疑似）</span><span>×</span></div>'+
+      '    <div class="bd">'+
+      '      <div class="row"><div class="ico">🟦</div><div>実行するプログラム名、または開くフォルダーやドキュメント名、インターネット リソース名を入力してください。</div></div>'+
+      '      <div style="margin:4px 0 2px;font-size:12px">名前(O):</div>'+
+      '      <div class="field" id="runField"><span style="color:#888">（ここに Ctrl+V で貼り付け）</span></div>'+
+      '      <div style="margin:10px 0 14px"><button class="wbtn" onclick="pasteSim()">② Ctrl+V で貼り付け（疑似）</button></div>'+
+      '      <div class="btns">'+
+      '        <button class="wbtn" onclick="runOk()">③ OK／Enter（疑似）</button>'+
+      '        <button class="wbtn" onclick="closeModal()">キャンセル</button>'+
+      '      </div>'+
+      '    </div>'+
+      '  </div>'+
+      '</div>';
+  }
+  var pasted=false;
+  function pasteSim(){
+    var f=document.getElementById("runField");
+    if(!f) return;
+    if(planted){ f.innerHTML='<span class="token">'+esc(TOKEN_TEXT)+'</span>'; pasted=true; }
+    else { f.innerHTML='<span style="color:#888">（クリップボードは空です）</span>'; pasted=false; }
+  }
+  // 疑似ターミナル：Enterの後、裏側で何が進むかを架空ログで見せる（すべて表示だけ）
+  // [クラス, アイコン, 文面]（すべて架空の表示）
+  var TERM_LINES = [
+    ["dim",  "😈", "命令を受け取りました（疑似）"],
+    ["",     "📡", "攻撃者のサーバーに接続中 ........ 接続"],
+    ["",     "💣", "追加プログラムをダウンロード中 ... 完了"],
+    ["warn", "🔑", "保存されたパスワードを探索中 ..... 14件 見つかりました"],
+    ["warn", "🍪", "ブラウザの履歴・クッキーを収集中 .. 完了"],
+    ["warn", "📤", "書類フォルダーを圧縮して送信中 .... 送信"],
+    ["",     "🕹", "遠隔操作の受け入れを開始 ......... 待機中"],
+    ["dim",  "☠", "画面上は何も起きていません。利用者は気づいていません。"]
+  ];
+  var termTimer=null;
+  function runOk(){
+    if(!pasted){ pasteSim(); return; }
+    openTerm();
+  }
+  function openTerm(){
+    document.getElementById("modalHost").innerHTML =
+      '<div class="winos" id="winos">'+
+      '  <div class="termwin" role="dialog" aria-label="裏側で起きていること（疑似）">'+
+      '    <div class="tbar"><span class="dots"><i></i><i></i><i></i></span><span>😈 裏側で起きていること</span><span class="sim">（疑似・架空の表示です）</span></div>'+
+      '    <div class="body"><div class="devil">😈</div><div class="bombs">💣💣💣</div><pre id="termOut"></pre></div>'+
+      '    <div class="prog"><div class="lbl"><span id="progLbl">処理中…</span><span id="progPct">0%</span></div><div class="bar"><i id="progBar"></i></div></div>'+
+      '    <div class="tfoot"><button class="wbtn" onclick="skipTerm()">スキップ</button></div>'+
+      '  </div>'+
+      '</div>';
+    var out=document.getElementById("termOut"), i=0;
+    out.innerHTML='<span class="cur"></span>';
+    function step(){
+      if(i>=TERM_LINES.length){ finishTerm(); return; }
+      var cls=TERM_LINES[i][0], ic=TERM_LINES[i][1], txt=esc(TERM_LINES[i][2]);
+      var line = '<span class="ic">'+ic+'</span>' + (cls ? '<span class="'+cls+'">'+txt+'</span>' : txt);
+      out.innerHTML = out.innerHTML.replace('<span class="cur"></span>','') + line + '\n<span class="cur"></span>';
+      i++;
+      var pct=Math.round(i/TERM_LINES.length*100);
+      document.getElementById("progBar").style.width=pct+'%';
+      document.getElementById("progPct").textContent=pct+'%';
+      termTimer=setTimeout(step, 650);
+    }
+    termTimer=setTimeout(step, 400);
+  }
+  function finishTerm(){
+    var l=document.getElementById("progLbl"); if(l) l.textContent="完了（疑似）";
+    termTimer=setTimeout(showResult, 900);
+  }
+  function skipTerm(){ if(termTimer) clearTimeout(termTimer); showResult(); }
+  function showResult(){
+    document.getElementById("modalHost").innerHTML =
+      '<div class="winos" id="winos">'+
+      '  <div class="msgbox" role="dialog" aria-label="'+esc(MSG_TITLE)+'">'+
+      '    <div class="bar"><span>'+esc(MSG_TITLE)+'</span></div>'+
+      '    <div class="bd"><div class="i">💬</div><div>'+esc(MSG_BODY)+'<br><span class="note">実際の攻撃なら、ここで<b>情報窃取や遠隔操作</b>が始まっています。</span></div></div>'+
+      '    <div class="ft"><button class="wbtn" onclick="afterRun()">OK</button></div>'+
+      '  </div>'+
+      '</div>';
+  }
+  function afterRun(){ pasted=false; closeModal(); go("reveal"); }
+  function closeModal(){ document.getElementById("modalHost").innerHTML=""; }
+  function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  go("intro");
+</script>
+</body>
+</html>
