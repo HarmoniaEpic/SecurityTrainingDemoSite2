@@ -119,6 +119,17 @@
   .termwin .prog .bar{height:12px; background:#1b222b; border-radius:6px; overflow:hidden; border:1px solid #333}
   .termwin .prog .bar i{display:block; height:100%; width:0; background:linear-gradient(90deg,#B3261E,#ff7b72); transition:width .5s ease}
   .termwin .tfoot{padding:8px 12px 12px; text-align:right; font-family:"Segoe UI","Noto Sans JP",sans-serif}
+
+  /* ====== 印刷用 ====== */
+  @media print{
+    @page{size:A4; margin:12mm}
+    body{background:#fff}
+    #eduBar,.clipbox,#modalHost,section#reveal .btn{display:none !important}
+    .wrap{max-width:none; padding:0}
+    .card{break-inside:avoid; page-break-inside:avoid}
+    h1,h3{break-after:avoid; page-break-after:avoid}
+    .pill,.token,.mark{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  }
 </style>
 </head>
 <body>
